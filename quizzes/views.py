@@ -4,6 +4,7 @@ from .models import Quiz, Question, Option, QuizAttempt
 from .serializers import QuizSerializer, QuizAttemptSerializer
 from django.contrib.auth import get_user_model
 from rest_framework.views import APIView
+from django.db.models import Avg,Count
 
 User = get_user_model()
 
@@ -94,3 +95,24 @@ class UserResultsView(generics.ListAPIView):
 
     def get_queryset(self):
         return QuizAttempt.objects.filter(user=self.request.user).order_by('-created_at')
+    
+class QuizStatsView(APIView):
+    permission_classes = [permissions.AllowAny]
+
+    def get(self, request, pk):
+        quiz = Quiz.objects.get(pk=pk)
+        attempts = QuizAttempt.objects.filter(quiz=quiz)
+        data = {
+            "quiz": quiz.title,
+            "total_attempts": attempts.count(),
+            "average_score": round(attempts.aggregate(Avg("score"))["score__avg"] or 0, 2),
+            "unique_users": attempts.values("user").distinct().count(),
+        }
+        return Response(data)
+    
+class CategoryListView(APIView):
+    permission_classes = [permissions.AllowAny]
+
+    def get(self, request):
+        categories = Quiz.objects.values_list('category', flat=True).distinct()
+        return Response({"categories": list(categories)})
