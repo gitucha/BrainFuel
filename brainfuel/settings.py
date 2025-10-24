@@ -54,6 +54,7 @@ INSTALLED_APPS = [
     'users',
     'quizzes',
     'leaderboard',
+    'drf_yasg',
 ]
 
 MIDDLEWARE = [

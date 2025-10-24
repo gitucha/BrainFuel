@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Quiz, Question, Option
+from .models import Quiz, Question, Option, QuizAttempt
 
 
 class OptionSerializer(serializers.ModelSerializer):
@@ -41,3 +41,10 @@ class QuizSerializer(serializers.ModelSerializer):
             for opt_data in options_data:
                 Option.objects.create(question=question, **opt_data)
         return quiz
+
+class QuizAttemptSerializer(serializers.ModelSerializer):
+    quiz_title = serializers.ReadOnlyField(source="quiz.title")
+
+    class Meta:
+        model = QuizAttempt
+        fields = ["id", "quiz_title", "score", "correct", "total", "xp_earned", "created_at"]

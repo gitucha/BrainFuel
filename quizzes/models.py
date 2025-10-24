@@ -32,3 +32,15 @@ class Option(models.Model):
 
     def __str__(self):
         return f"{self.text} ({'Correct' if self.is_correct else 'Wrong'})"
+
+class QuizAttempt(models.Model):
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    quiz = models.ForeignKey(Quiz, on_delete=models.CASCADE)
+    score = models.IntegerField()
+    correct = models.IntegerField()
+    total = models.IntegerField()
+    xp_earned = models.IntegerField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.user.username} - {self.quiz.title} ({self.score}%)"

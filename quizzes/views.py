@@ -1,8 +1,9 @@
 from rest_framework import generics, permissions, status
 from rest_framework.response import Response
-from .models import Quiz, Question, Option
-from .serializers import QuizSerializer
+from .models import Quiz, Question, Option, QuizAttempt
+from .serializers import QuizSerializer, QuizAttemptSerializer
 from django.contrib.auth import get_user_model
+from rest_framework.views import APIView
 
 User = get_user_model()
 
@@ -57,7 +58,39 @@ class QuizSubmitView(generics.GenericAPIView):
             user.badges.append(f"Level {user.level}")
         user.save()
 
+        QuizAttempt.objects.create(
+            user=user,
+            quiz=quiz,
+            score=score,        
+            correct=correct,
+            total=total,
+            xp_earned=xp_earned,
+        )
+
         return Response(
             {"score": score, "correct": correct, "total": total, "xp_earned": xp_earned},
             status=status.HTTP_200_OK,
         )
+
+class LeaderboardView(APIView):
+    permission_classes = [permissions.AllowAny]
+
+    def get(self, request):
+        users = User.objects.all().order_by('-xp', 'level')[:10]
+        leaderboard = [
+            {
+                "username": user.username,
+                "level": user.level,
+                "xp": user.xp,
+                "badges": user.badges,
+            }
+            for user in users
+        ]
+        return Response(leaderboard)
+    
+class UserResultsView(generics.ListAPIView):
+    serializer_class = QuizAttemptSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        return QuizAttempt.objects.filter(user=self.request.user).order_by('-created_at')

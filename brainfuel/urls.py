@@ -20,9 +20,28 @@ from rest_framework_simplejwt.views import (
     TokenObtainPairView,
     TokenRefreshView,
 )
+from drf_yasg.views import get_schema_view
+from drf_yasg import openapi
+from rest_framework import permissions
+
+
+schema_view = get_schema_view(
+    openapi.Info(
+        title="BrainFuel API",
+        default_version='v1',
+        description="BrainFuel, gamified learning platform API documentation",
+        contact=openapi.Contact(email="briantablet23@gmail.com"),
+    ),
+    public=True,
+    permission_classes=[permissions.AllowAny],
+
+) 
+
+
 
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/quizzes/', include('quizzes.urls')),  # Include quizzes app URLs
     path('api/auth/', include('users.urls')),  # Include user app URLs for registration and user details
+    path('docs/', schema_view.with_ui('swagger', cache_timeout=0), name='api_docs'),
 ]
