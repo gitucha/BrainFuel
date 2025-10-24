@@ -10,6 +10,14 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/5.2/ref/settings/
 """
 
+from dotenv import load_dotenv
+import os
+load_dotenv()
+
+SECRET_KEY = os.getenv('DJANGO_SECRET_KEY')
+DEBUG = os.getenv('DEBUG', 'False') == 'True'
+
+
 from pathlib import Path
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -20,7 +28,11 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-#jq9bl^^rlh(e#c*!u9#sob+2^76m7x0=mts+$yxg9*1))zm&r'
+import os
+
+SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY')
+if not SECRET_KEY:
+    raise Exception("DJANGO_SECRET_KEY environment variable not set")
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
@@ -131,7 +143,7 @@ AUTH_USER_MODEL = 'users.User'
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
        
-        'rest_framework_simplejwt.authentication.JwtAuthentication',
+        'rest_framework_simplejwt.authentication.JWTAuthentication',
          'rest_framework.authentication.SessionAuthentication',
     ]
 }
