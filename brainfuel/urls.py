@@ -43,5 +43,6 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/quizzes/', include('quizzes.urls')),  # Include quizzes app URLs
     path('api/auth/', include('users.urls')),  # Include user app URLs for registration and user details
+    path('api/users/', include('users.urls')),  # Include user app URLs for profile management
     path('docs/', schema_view.with_ui('swagger', cache_timeout=0), name='api_docs'),
 ]
