@@ -33,6 +33,6 @@ class UserTests(TestCase):
 	def test_user_detail_view_unauthenticated(self):
 		user = User.objects.create_user(username='detailuser2', password='testpass2')
 		response = self.client.get(reverse('user-detail', kwargs={'pk': user.pk}))
-		self.assertEqual(response.status_code, 302)  # Redirect to login
+		self.assertEqual(response.status_code, 302) # Redirect to login
 
-# Make sure to replace 'register' and 'user-detail' with your actual URL names if different.
+# replace 'register' and 'user-detail' with your actual URL names if different.

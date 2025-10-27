@@ -34,15 +34,14 @@ schema_view = get_schema_view(
     ),
     public=True,
     permission_classes=[permissions.AllowAny],
-
 ) 
 
 
 
 urlpatterns = [
     path('admin/', admin.site.urls),
-    path('api/quizzes/', include('quizzes.urls')),  # Include quizzes app URLs
-    path('api/auth/', include('users.urls')),  # Include user app URLs for registration and user details
-    path('api/users/', include('users.urls')),  # Include user app URLs for profile management
+    path('api/quizzes/', include('quizzes.urls')),
+    path('api/auth/', include('users.urls')),  
+    path('api/users/', include('users.urls')),  
     path('docs/', schema_view.with_ui('swagger', cache_timeout=0), name='api_docs'),
 ]
