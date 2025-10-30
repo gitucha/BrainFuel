@@ -4,6 +4,7 @@ from django.db.models import Sum
 from django.contrib.auth import get_user_model
 from quizzes.models import QuizAttempt  # adjust if your app name differs
 from .models import Achievement
+from notifications.utils import create_notification
 
 User = get_user_model()
 
@@ -14,7 +15,10 @@ def unlock_achievement(user, achievement_title):
         user.achievements.add(achievement)
         user.xp += achievement.xp_reward
         user.save()
+        message = f" You unlocked the '{achievement_title}' achievement and earned {achievement.xp_reward} XP!"
+        create_notification(user, message)
         print(f"{user.email} unlocked: {achievement_title}")
+
 
 @receiver(post_save, sender=QuizAttempt)
 def handle_quiz_completion(sender, instance, created, **kwargs):

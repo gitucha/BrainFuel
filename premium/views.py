@@ -44,15 +44,20 @@ class PaymentHistoryView(generics.ListAPIView):
 @api_view(["POST"])
 @permission_classes([permissions.IsAdminUser])
 def upgrade_user(request):
-    user_id = request.data.get("user_id")
-    from users.models import User
-    user = User.objects.filter(id=user_id).first()
-    if not user:
-        return Response({"detail": "User not found."}, status=status.HTTP_404_NOT_FOUND)
+    user = request.user
+    if user.is_premium:
+        return Response({"detail": "User is already premium."}, status=status.HTTP_400_BAD_REQUEST)
+
     user.is_premium = True
     user.save()
-    return Response({"detail": f"{user.email} upgraded to premium."})
-
+    return Response({
+        "message": "Account successfully upgraded to premium.",
+        "user": {
+            "id": user.id,
+            "email": user.email,
+            "is_premium": user.is_premium,
+        }
+    }, status=status.HTTP_200_OK)
 
 # Add thalers (virtual currency)
 @api_view(["POST"])

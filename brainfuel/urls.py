@@ -44,4 +44,8 @@ urlpatterns = [
     path('api/auth/', include('users.urls')),  
     path('api/users/', include('users.urls')),  
     path('docs/', schema_view.with_ui('swagger', cache_timeout=0), name='api_docs'),
+    path('api/notifications/', include('notifications.urls')),
+    path('api/leaderboard/', include('leaderboard.urls')),
+    path('api/premium/', include('premium.urls')),
+    path('api/achievements/', include('achievements.urls')),
 ]
