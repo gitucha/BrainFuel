@@ -4,7 +4,7 @@ from rest_framework_simplejwt.views import (
 )
 from .views import UserUpdateView
 from .views import RegisterView, UserDetailView, MyTokenObtainPairView, AdminUserListView, AdminUserDetailView, AdminUserUpdateView, AdminUserDeleteView
-from .views import TermsView, AcceptTermsView
+from .views import TermsView, AcceptTermsView, UpgradeToPremiumView
 
 
 urlpatterns = [
@@ -21,4 +21,6 @@ urlpatterns = [
 
     path('terms/', TermsView.as_view(), name='terms'),
     path('accept-terms/', AcceptTermsView.as_view(), name='accept_terms'),
+
+    path('upgrade/', UpgradeToPremiumView.as_view(), name='upgrade_premium'),
 ]

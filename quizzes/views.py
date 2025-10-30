@@ -1,10 +1,11 @@
-from rest_framework import generics, permissions, status
+from rest_framework import generics, permissions, status, filters
 from rest_framework.response import Response
 from .models import Quiz, Question, Option, QuizAttempt,QuizReport
 from .serializers import QuizSerializer, QuizAttemptSerializer, QuizReportSerializer
 from django.contrib.auth import get_user_model
 from rest_framework.views import APIView
-from django.db.models import Avg,Count
+from django.db.models import Avg,Count,Q
+from django.shortcuts import get_object_or_404
 
 User = get_user_model()
 
@@ -134,6 +135,29 @@ class ApproveQuizView(APIView):
         except Quiz.DoesNotExist:
          return Response({'error': 'quiz not found'}, status=status.HTTP_404_NOT_FOUND)
         
+# List all approved quizzes
+class ApprovedQuizListView(generics.ListAPIView):
+    queryset = Quiz.objects.filter(status="approved")
+    serializer_class = QuizSerializer
+    permission_classes = [permissions.AllowAny]
+
+# Retrieve a single approved quiz
+class ApprovedQuizDetailView(generics.RetrieveAPIView):
+    queryset = Quiz.objects.filter(status="approved")
+    serializer_class = QuizSerializer
+    permission_classes = [permissions.AllowAny]
+
+# Report a quiz (user)
+class QuizReportCreateView(generics.CreateAPIView):
+    queryset = QuizReport.objects.all()
+    serializer_class = QuizReportSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def perform_create(self, serializer):
+        quiz_id = self.kwargs["pk"]
+        quiz = get_object_or_404(Quiz, id=quiz_id)
+        serializer.save(reported_by=self.request.user, quiz=quiz)
+
 class RejectQuizView(APIView):
     permission_classes = [permissions.IsAdminUser]
 
@@ -157,3 +181,54 @@ class ReportedQuizzesView(generics.ListAPIView):
     queryset = QuizReport.objects.all()
     serializer_class = QuizReportSerializer
     permission_classes = [permissions.IsAdminUser]
+
+class QuizListView(generics.ListAPIView):
+    """
+    List all approved quizzes.
+    Optional filters: ?category=Science&difficulty=easy&premium=true
+    """
+    serializer_class = QuizSerializer
+    permission_classes = [permissions.AllowAny]
+    filter_backends = [filters.SearchFilter]
+    search_fields = ['title', 'description', 'category']
+
+    def get_queryset(self):
+        queryset = Quiz.objects.filter(status='approved')
+        category = self.request.query_params.get('category')
+        difficulty = self.request.query_params.get('difficulty')
+        premium = self.request.query_params.get('premium')
+
+        if category:
+            queryset = queryset.filter(category__icontains=category)
+        if difficulty:
+            queryset = queryset.filter(difficulty__iexact=difficulty)
+        if premium:
+            queryset = queryset.filter(is_premium=(premium.lower() == 'true'))
+
+        return queryset
+
+
+class UserQuizzesView(generics.ListAPIView):
+    """List all quizzes created by a specific user"""
+    serializer_class = QuizSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        user_id = self.kwargs.get('user_id')
+        return Quiz.objects.filter(created_by_id=user_id)
+
+
+class QuizDetailView(generics.RetrieveAPIView):
+    queryset = Quiz.objects.filter(status='approved')
+    serializer_class = QuizSerializer
+    permission_classes = [permissions.AllowAny]
+    lookup_field = 'pk'
+
+
+class CreateQuizView(generics.CreateAPIView):
+    """Create new quiz - pending by default"""
+    serializer_class = QuizSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def perform_create(self, serializer):
+        serializer.save(created_by=self.request.user, status='pending')

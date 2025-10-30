@@ -69,4 +69,15 @@ class AcceptTermsView(APIView):
             user=request.user,
             defaults={'terms': latest_terms}
         )
-        return Response({'status': 'terms accepted'})
+        return Response({'message': 'terms accepted Successfully'})
+    
+from rest_framework import status
+
+class UpgradeToPremiumView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request):
+        user = request.user
+        user.is_premium = True
+        user.save()
+        return Response({"message": "Upgraded to Premium successfully!"}, status=status.HTTP_200_OK)

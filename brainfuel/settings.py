@@ -54,6 +54,7 @@ INSTALLED_APPS = [
     'users',
     'quizzes',
     'leaderboard',
+    'premium'
     'drf_yasg',
 ]
 

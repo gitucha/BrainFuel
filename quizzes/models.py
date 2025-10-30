@@ -18,6 +18,7 @@ class Quiz(models.Model):
     )
     created_at = models.DateTimeField(auto_now_add=True)
     status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='approved')
+    is_premium = models.BooleanField(default=False)
     def __str__(self):
         return self.title
 
