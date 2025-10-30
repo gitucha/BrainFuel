@@ -49,12 +49,16 @@ class Option(models.Model):
 
 class QuizAttempt(models.Model):
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
-    quiz = models.ForeignKey(Quiz, on_delete=models.CASCADE)
-    score = models.IntegerField()
-    correct = models.IntegerField()
-    total = models.IntegerField()
-    xp_earned = models.IntegerField()
-    created_at = models.DateTimeField(auto_now_add=True)
+    quiz = models.ForeignKey('Quiz', on_delete=models.CASCADE)
+    score = models.FloatField(default=0)
+    completed_at = models.DateTimeField(auto_now_add=True)
 
-    def __str__(self):
-        return f"{self.user.username} - {self.quiz.title} ({self.score}%)"
+    def save(self, *args, **kwargs):
+        is_new = self._state.adding
+        super().save(*args, **kwargs)
+
+        # Award XP on first save
+        if is_new:
+            xp_earned = int(self.score)  # simple rule: XP = score %
+            self.user.xp += xp_earned
+            self.user.save()

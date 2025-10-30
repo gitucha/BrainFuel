@@ -57,7 +57,7 @@ INSTALLED_APPS = [
     'premium',
     'achievements',
     'drf_yasg',
-
+    'achievements.apps.AchievementsConfig',
 ]
 
 MIDDLEWARE = [
