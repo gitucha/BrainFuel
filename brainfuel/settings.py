@@ -54,8 +54,10 @@ INSTALLED_APPS = [
     'users',
     'quizzes',
     'leaderboard',
-    'premium'
+    'premium',
+    'achievements',
     'drf_yasg',
+
 ]
 
 MIDDLEWARE = [
