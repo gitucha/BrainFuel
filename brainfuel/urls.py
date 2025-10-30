@@ -23,7 +23,8 @@ from rest_framework_simplejwt.views import (
 from drf_yasg.views import get_schema_view
 from drf_yasg import openapi
 from rest_framework import permissions
-
+from admin_insights.views import admin_insights
+from admin_reports.views import admin_reports
 
 schema_view = get_schema_view(
     openapi.Info(
@@ -48,4 +49,7 @@ urlpatterns = [
     path('api/leaderboard/', include('leaderboard.urls')),
     path('api/premium/', include('premium.urls')),
     path('api/achievements/', include('achievements.urls')),
+
+    path('api/admin/insights/', admin_insights, name='admin_insights'),
+    path('api/admin/reports/', admin_reports, name='admin_reports'),
 ]

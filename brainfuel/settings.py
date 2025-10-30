@@ -58,6 +58,8 @@ INSTALLED_APPS = [
     'achievements',
     'drf_yasg',
     'notifications',
+    'admin_insights',
+    'admin_reports',
     
 ]
 
