@@ -1,7 +1,7 @@
 from rest_framework import generics, permissions, status
 from rest_framework.response import Response
-from .models import Quiz, Question, Option, QuizAttempt
-from .serializers import QuizSerializer, QuizAttemptSerializer
+from .models import Quiz, Question, Option, QuizAttempt,QuizReport
+from .serializers import QuizSerializer, QuizAttemptSerializer, QuizReportSerializer
 from django.contrib.auth import get_user_model
 from rest_framework.views import APIView
 from django.db.models import Avg,Count
@@ -116,3 +116,44 @@ class CategoryListView(APIView):
     def get(self, request):
         categories = Quiz.objects.values_list('category', flat=True).distinct()
         return Response({"categories": list(categories)})
+    
+class PendingQuizzesView(generics.ListAPIView):
+    queryset = Quiz.objects.filter(status='pending')
+    serializer_class = QuizSerializer
+    permission_classes = [permissions.IsAdminUser]
+
+class ApproveQuizView(APIView):
+    permission_classes = [permissions.IsAdminUser]
+
+    def post(self, request, pk):
+        try:
+         quiz = Quiz.objects.get(pk=pk)
+         quiz.status = 'approved'
+         quiz.save()
+         return Response({'message': 'quiz approved'})
+        except Quiz.DoesNotExist:
+         return Response({'error': 'quiz not found'}, status=status.HTTP_404_NOT_FOUND)
+        
+class RejectQuizView(APIView):
+    permission_classes = [permissions.IsAdminUser]
+
+    def post(self, request, pk):
+        try:
+         quiz = Quiz.objects.get(pk=pk)
+         quiz.status = 'rejected'
+         quiz.save()
+         return Response({'message': 'quiz rejected'})
+        except Quiz.DoesNotExist:
+         return Response({'error': 'quiz not found'}, status=status.HTTP_404_NOT_FOUND)
+    
+class ReportQuizView(generics.CreateAPIView):
+    serializer_class = QuizReportSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)
+
+class ReportedQuizzesView(generics.ListAPIView):
+    queryset = QuizReport.objects.all()
+    serializer_class = QuizReportSerializer
+    permission_classes = [permissions.IsAdminUser]

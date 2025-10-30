@@ -3,6 +3,7 @@ from django.contrib.auth import get_user_model,authenticate
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from rest_framework_simplejwt.views import TokenObtainPairView
+from .models import TermsAndConditions, UserTermsAcceptance
 
 User = get_user_model()
 
@@ -18,16 +19,16 @@ class MyTokenObtainPairSerializer(TokenObtainPairSerializer):
             raise serializers.ValidationError("Invalid email or password")
         
         data = super().validate(attrs)
-        data["username"] = user.username
-        data["email"] = user.email
+        data["Welcome Back!"] = user.username
+        
         return data
     
     @classmethod
     def get_token(cls, user):
         token = super().get_token(user)
         
-        token['username'] = user.username
-        token['email'] = user.email
+        token['Welcome back!'] = user.username
+        
         return token
     
 
@@ -43,7 +44,7 @@ class RegisterSerializer(serializers.ModelSerializer):
         user = User.objects.create_user(
             email=validated_data['email'],
             password=validated_data['password'],
-           username=validated_data['username'],
+          username = validated_data.get('username') or validated_data['email'].split('@')[0],
         )
         return user
 
@@ -53,3 +54,17 @@ class UserSerializer(serializers.ModelSerializer):
         model = User
         fields = ['id', 'username', 'email','is_premium',  'xp', 'level', 'badges', 'bio', 'profile_picture']
 
+class AdminUserSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = User
+        fields = "__all__"
+
+class TermsSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = TermsAndConditions
+        fields = ['id', 'version', 'content', 'created_at', 'updated_at']
+
+class UserTermsAcceptanceSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = UserTermsAcceptance
+        fields = ['id', 'user', 'terms', 'accepted_at']
