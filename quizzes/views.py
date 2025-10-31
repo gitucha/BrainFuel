@@ -232,3 +232,27 @@ class CreateQuizView(generics.CreateAPIView):
 
     def perform_create(self, serializer):
         serializer.save(created_by=self.request.user, status='pending')
+
+class QuizUpdateView(generics.UpdateAPIView):
+    """Update an existing quiz"""
+    queryset = Quiz.objects.all()
+    serializer_class = QuizSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_object(self):
+        quiz = super().get_object()
+        if quiz.created_by != self.request.user:
+            raise permissions.PermissionDenied("You do not have permission to edit this quiz.")
+        return quiz
+    
+class QuizDeleteView(generics.DestroyAPIView):
+    """Delete an existing quiz"""
+    queryset = Quiz.objects.all()
+    serializer_class = QuizSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_object(self):
+        quiz = super().get_object()
+        if quiz.created_by != self.request.user:
+            raise permissions.PermissionDenied("You do not have permission to delete this quiz.")
+        return quiz

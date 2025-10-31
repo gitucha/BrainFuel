@@ -1,5 +1,5 @@
 from django.urls import path
-from .views import QuizListCreateView, QuizDetailView, QuizSubmitView, LeaderboardView, UserResultsView, QuizStatsView, CategoryListView
+from .views import QuizListCreateView, QuizDetailView, QuizSubmitView, LeaderboardView, UserResultsView, QuizStatsView, CategoryListView, CreateQuizView, QuizUpdateView, QuizDeleteView
 from .views import PendingQuizzesView, ApproveQuizView, RejectQuizView, ReportQuizView, ReportedQuizzesView, QuizReportCreateView, ApprovedQuizListView, ApprovedQuizDetailView
 
 urlpatterns = [
@@ -7,6 +7,9 @@ urlpatterns = [
     #user quiz endpoints
     path("", QuizListCreateView.as_view(), name="quiz_list_create"),
     path("<int:pk>/", QuizDetailView.as_view(), name="quiz_detail"),
+    path('create/', CreateQuizView.as_view(), name='quiz_create'),
+    path('<int:pk>/update/', QuizUpdateView.as_view(), name='quiz_update'),
+    path('<int:pk>/delete/', QuizDeleteView.as_view(), name='quiz_delete'),
     path("<int:pk>/submit/", QuizSubmitView.as_view(), name="quiz_submit"),
     path("leaderboard/", LeaderboardView.as_view(), name="leaderboard"),
     path("results/", UserResultsView.as_view(), name="user_results"),
