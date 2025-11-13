@@ -1,5 +1,7 @@
 from rest_framework import generics, permissions, status, filters
 from rest_framework.response import Response
+
+from users.models import ThalerTransaction
 from .models import Quiz, Question, Option, QuizAttempt, QuizReport
 from .serializers import (
     QuizSerializer,
@@ -237,77 +239,86 @@ class QuizDeleteView(generics.DestroyAPIView):
             raise permissions.PermissionDenied("You do not have permission to delete this quiz.")
         return obj
 
-
 class QuizSubmitView(APIView):
-    """
-    POST /api/quizzes/<pk>/submit/
-    body: { "answers": { "<question_id>": <option_id>, ... } }
-    returns: score, correct, total, xp_earned, thalers_earned
-    """
     permission_classes = [permissions.IsAuthenticated]
 
-    @transaction.atomic
     def post(self, request, pk):
-        quiz = get_object_or_404(Quiz, pk=pk, status="approved")
-        serializer = SubmitAnswerSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        answers = serializer.validated_data["answers"]
+        quiz = Quiz.objects.get(pk=pk)
+        answers = request.data.get("answers", {})  # {"question_id": option_id}
 
+        questions = quiz.questions.all()
         correct = 0
-        total = quiz.questions.count()
+        streak = 0
+        highest_streak = 0
 
-        for q in quiz.questions.all():
-            chosen_option_id = answers.get(str(q.id)) or answers.get(q.id)
-            if chosen_option_id:
-                try:
-                    option = q.options.get(pk=chosen_option_id)
-                    if option.is_correct:
-                        correct += 1
-                except Option.DoesNotExist:
-                    pass
+        # Count correct answers + find streak
+        for q in questions:
+            chosen = answers.get(str(q.id))
+            if not chosen:
+                streak = 0
+                continue
+            try:
+                option = Option.objects.get(pk=chosen, question=q)
+                if option.is_correct:
+                    correct += 1
+                    streak += 1
+                    highest_streak = max(highest_streak, streak)
+                else:
+                    streak = 0
+            except Option.DoesNotExist:
+                streak = 0
+                continue
 
+        total = len(questions)
         score = int((correct / total) * 100) if total else 0
 
-        # XP rule: 10 XP per correct answer
-        xp_earned = correct * 10
+        # XP SYSTEM
+        base_xp = correct * 10
+        streak_bonus = highest_streak * 5
+        xp_earned = base_xp + streak_bonus
 
-        # Thalers rule: award 1 thaler per correct for now (adjust as needed)
-        thalers_earned = correct * 1
+        # THALERS SYSTEM
+        thalers_earned = correct  # 1 thaler per correct (adjust as needed)
 
         user = request.user
 
-        # Create attempt and update user atomically
-        attempt = QuizAttempt.objects.create(
+        # Leveling system
+        user.xp += xp_earned
+        leveled_up = False
+        while user.xp >= 100 * user.level:
+            user.xp -= 100 * user.level
+            user.level += 1
+            leveled_up = True
+            user.badges.append(f"Level {user.level}")
+
+        # Thaler wallet update
+        user.thalers += thalers_earned
+        user.save()
+
+        # Record transaction
+        ThalerTransaction.objects.create(
+            user=user,
+            amount=thalers_earned,
+            reason=f"Quiz reward: {quiz.title}"
+        )
+
+        # Save Attempt
+        QuizAttempt.objects.create(
             user=user,
             quiz=quiz,
             score=score,
-            correct=correct,
-            total=total,
-            xp_earned=xp_earned,
-            thalers_earned=thalers_earned,
         )
 
-        # Update user totals (only after creating attempt)
-        user.xp = user.xp + xp_earned
-        # Level up check: example rule
-        while user.xp >= 100 * user.level:
-            user.level += 1
-            # add a badge for leveling up
-            badges = user.badges or []
-            badges.append(f"Level {user.level}")
-            user.badges = badges
-        user.thalers = (user.thalers or 0) + thalers_earned
-        user.save()
-
-        data = {
+        return Response({
             "score": score,
             "correct": correct,
             "total": total,
             "xp_earned": xp_earned,
+            "streak": highest_streak,
             "thalers_earned": thalers_earned,
-            "attempt_id": attempt.id,
-        }
-        return Response(data, status=status.HTTP_200_OK)
+            "leveled_up": leveled_up,
+            "new_level": user.level
+        })
 
 
 class LeaderboardView(APIView):
