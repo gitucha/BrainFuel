@@ -33,20 +33,30 @@ class MyTokenObtainPairSerializer(TokenObtainPairSerializer):
     
 
 class RegisterSerializer(serializers.ModelSerializer):
-    password = serializers.CharField(write_only=True)
-    username = serializers.CharField(required=False, allow_blank=True)
+    email = serializers.EmailField(required=True)
+    username = serializers.CharField(required=True)
+    password = serializers.CharField(write_only=True, min_length=6)
 
     class Meta:
         model = User
-        fields = ('username', 'email', 'password')
+        fields = ("email", "username", "password")
+
+    def validate_email(self, value):
+        if User.objects.filter(email=value).exists():
+            raise serializers.ValidationError("Email is already registered")
+        return value
+
+    def validate_username(self, value):
+        if User.objects.filter(username=value).exists():
+            raise serializers.ValidationError("Username is already taken")
+        return value
 
     def create(self, validated_data):
-        user = User.objects.create_user(
-            email=validated_data['email'],
-            password=validated_data['password'],
-          username = validated_data.get('username') or validated_data['email'].split('@')[0],
+        return User.objects.create_user(
+            email=validated_data["email"],
+            username=validated_data["username"],
+            password=validated_data["password"],
         )
-        return user
 
 
 class UserSerializer(serializers.ModelSerializer):
