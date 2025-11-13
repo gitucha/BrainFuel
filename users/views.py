@@ -12,6 +12,7 @@ from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
 from django.core.mail import send_mail
 from django.utils.encoding import force_bytes, force_str
 from django.contrib.auth import get_user_model
+from django.conf import settings
 
 User = get_user_model()
 token_generator = PasswordResetTokenGenerator()
@@ -19,15 +20,15 @@ token_generator = PasswordResetTokenGenerator()
 class MyTokenObtainPairView(TokenObtainPairView):
     serializer_class = MyTokenObtainPairSerializer
 
-
 class RequestPasswordResetView(APIView):
     permission_classes = []
 
     def post(self, request):
         email = request.data.get("email")
         if not email:
-            return Response({"error": "Email is required"}, status=400)
+            return Response({"error": "Email is required"}, status=status.HTTP_400_BAD_REQUEST)
 
+        # Do not reveal whether email exists — reply same message for privacy
         try:
             user = User.objects.get(email=email)
         except User.DoesNotExist:
@@ -36,16 +37,19 @@ class RequestPasswordResetView(APIView):
         uid = urlsafe_base64_encode(force_bytes(user.pk))
         token = token_generator.make_token(user)
 
-        reset_url = f"http://localhost:5173/reset-password/{uid}/{token}"
+        # Build frontend URL (change host if needed)
+        reset_url = f"{settings.FRONTEND_URL.rstrip('/')}/reset-password/{uid}/{token}"
 
+        # Simple email (development: console backend). Use HTML templates for production.
         send_mail(
             subject="BrainFuel Password Reset",
             message=f"Click the link to reset your password: {reset_url}",
-            from_email="BrainFuel <no-reply@brainfuel.com>",
+            from_email=getattr(settings, "DEFAULT_FROM_EMAIL", "no-reply@brainfuel.local"),
             recipient_list=[email],
         )
 
-        return Response({"message": "Password reset link sent"})
+        return Response({"message": "If this email exists, a reset link has been sent."})
+
 
 
 class PasswordResetConfirmView(APIView):
@@ -56,18 +60,17 @@ class PasswordResetConfirmView(APIView):
             uid = force_str(urlsafe_base64_decode(uidb64))
             user = User.objects.get(pk=uid)
         except Exception:
-            return Response({"error": "Invalid link"}, status=400)
+            return Response({"error": "Invalid link"}, status=status.HTTP_400_BAD_REQUEST)
 
         if not token_generator.check_token(user, token):
-            return Response({"error": "Reset link is invalid or expired"}, status=400)
+            return Response({"error": "Reset link is invalid or expired"}, status=status.HTTP_400_BAD_REQUEST)
 
         password = request.data.get("password")
         if not password:
-            return Response({"error": "Password is required"}, status=400)
+            return Response({"error": "Password is required"}, status=status.HTTP_400_BAD_REQUEST)
 
         user.set_password(password)
         user.save()
-
         return Response({"message": "Password reset successful"})
 
 class RegisterView(generics.CreateAPIView):

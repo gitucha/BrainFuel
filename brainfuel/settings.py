@@ -62,7 +62,7 @@ INSTALLED_APPS = [
     'admin_insights',
     'admin_reports',
     'corsheaders',
-    
+   
 ]
 
 MIDDLEWARE = [
@@ -101,6 +101,19 @@ TEMPLATES = [
 ]
 
 WSGI_APPLICATION = 'brainfuel.wsgi.application'
+
+INSTALLED_APPS += ["channels"]
+ASGI_APPLICATION = "brainfuel.asgi.application"
+
+CHANNEL_LAYERS = {
+  "default": {
+    "BACKEND": "channels.layers.InMemoryChannelLayer",
+    },
+}
+
+FRONTEND_URL = "http://localhost:5173"
+EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
+DEFAULT_FROM_EMAIL = "BrainFuel <no-reply@brainfuel.local>"
 
 
 # Database

@@ -1,6 +1,7 @@
 from django.db import models
 from django.contrib.auth.models import AbstractBaseUser, PermissionsMixin, BaseUserManager
 from django.contrib.auth import get_user_model
+from django.conf import settings
 # Create your models here.
 
 
@@ -82,4 +83,12 @@ class UserTermsAcceptance(models.Model):
     class Meta:
         unique_together = ('user', 'terms')
 
-    
+
+class ThalerTransaction(models.Model):
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="thalers_transactions")
+    amount = models.IntegerField()  # positive for credit, negative for spend
+    reason = models.CharField(max_length=255, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.user.email} {self.amount} ({self.reason})"

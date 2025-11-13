@@ -6,7 +6,7 @@ from .views import UserUpdateView
 from .views import RegisterView, UserDetailView, MyTokenObtainPairView, AdminUserListView, AdminUserDetailView, AdminUserUpdateView, AdminUserDeleteView
 from .views import TermsView, AcceptTermsView, UpgradeToPremiumView
 from .views import RequestPasswordResetView, PasswordResetConfirmView
-
+from .views_thalers import add_thalers, wallet, spend_thalers
 
 urlpatterns = [
     path('register/', RegisterView.as_view(), name='register'),
@@ -15,8 +15,7 @@ urlpatterns = [
     path('me/', UserDetailView.as_view(), name='user_detail'),
     path('me/update/', UserUpdateView.as_view(), name='user_update'),
     path('password-reset/', RequestPasswordResetView.as_view(), name='password_reset'),
-    path('password-reset-confirm/<uidb64>/<token>/', PasswordResetConfirmView.as_view(), name='password_reset_confirm'),
-
+    path('password-reset-confirm/<str:uidb64>/<str:token>/', PasswordResetConfirmView.as_view(), name='password_reset_confirm'),
     path('admin/users/', AdminUserListView.as_view(), name='admin_user_list'),
     path('admin/users/<int:pk>/', AdminUserDetailView.as_view(), name='admin_user_detail'),
     path('admin/users/<int:pk>/update_role/', AdminUserUpdateView.as_view(), name='admin_user_update'),
@@ -24,6 +23,10 @@ urlpatterns = [
 
     path('terms/', TermsView.as_view(), name='terms'),
     path('accept-terms/', AcceptTermsView.as_view(), name='accept_terms'),
+
+    path('thalers/add/', add_thalers, name='add_thalers'),
+    path('thalers/wallet/', wallet, name='wallet'),
+    path('thalers/spend/', spend_thalers, name='spend_thalers'),
 
     path('upgrade/', UpgradeToPremiumView.as_view(), name='upgrade_premium'),
 ]
