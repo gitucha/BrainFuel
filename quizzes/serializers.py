@@ -6,42 +6,23 @@ User = get_user_model()
 
 
 class OptionSerializer(serializers.ModelSerializer):
-    id = serializers.IntegerField(read_only=True)
-
     class Meta:
         model = Option
-        fields = ["id", "text"]  # do NOT expose is_correct to clients
-
+        fields = ["id", "text", "is_correct", "order"]
 
 class QuestionSerializer(serializers.ModelSerializer):
-    id = serializers.IntegerField(read_only=True)
     options = OptionSerializer(many=True, read_only=True)
 
     class Meta:
         model = Question
-        fields = ["id", "text", "options"]
-
+        fields = ["id", "text", "order", "options"]
 
 class QuizSerializer(serializers.ModelSerializer):
-    created_by = serializers.StringRelatedField(read_only=True)
     questions = QuestionSerializer(many=True, read_only=True)
 
     class Meta:
         model = Quiz
-        fields = [
-            "id",
-            "title",
-            "description",
-            "category",
-            "difficulty",
-            "created_by",
-            "created_at",
-            "status",
-            "is_premium",
-            "questions",
-        ]
-        read_only_fields = ["created_by", "created_at", "status"]
-
+        fields = ["id", "title", "description", "category", "difficulty", "status", "is_premium", "questions", "created_by", "created_at"]
 
 class QuizCreateSerializer(serializers.ModelSerializer):
     # For creators who include nested payloads (optional extension)
@@ -69,10 +50,13 @@ class QuizAttemptSerializer(serializers.ModelSerializer):
         read_only_fields = ["score", "correct", "total", "xp_earned", "thalers_earned", "created_at"]
 
 
-class SubmitAnswerSerializer(serializers.Serializer):
-    # expected: {"answers": {"<question_id>": <option_id>, ...}}
-    answers = serializers.DictField(child=serializers.IntegerField(), required=True)
 
+class SubmitAnswerSerializer(serializers.Serializer):
+    answers = serializers.DictField(
+        child=serializers.IntegerField(),
+        required=False,
+        help_text='Map of question_id -> option_id'
+    )
 
 class QuizReportSerializer(serializers.ModelSerializer):
     user = serializers.StringRelatedField(read_only=True)

@@ -115,6 +115,11 @@ FRONTEND_URL = "http://localhost:5173"
 EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
 DEFAULT_FROM_EMAIL = "BrainFuel <no-reply@brainfuel.local>"
 
+# settings.py
+PAYSTACK_SECRET_KEY = os.environ.get("PAYSTACK_SECRET_KEY", "sk_test_xxx")
+PAYSTACK_PUBLIC_KEY = os.environ.get("PAYSTACK_PUBLIC_KEY", "pk_test_xxx")
+FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://localhost:5173")  # used in success redirect
+
 
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases

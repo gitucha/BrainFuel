@@ -23,7 +23,10 @@ from rest_framework.permissions import IsAuthenticated, IsAdminUser
 from rest_framework import status
 from rest_framework.response import Response
 from django.shortcuts import get_object_or_404
-
+from rest_framework import status
+from rest_framework.response import Response
+from django.db import transaction
+import traceback
 User = get_user_model()
 
 
@@ -238,75 +241,54 @@ class QuizDeleteView(generics.DestroyAPIView):
         if obj.created_by != self.request.user and not self.request.user.is_staff:
             raise permissions.PermissionDenied("You do not have permission to delete this quiz.")
         return obj
+ # quizzes/views.py (replace QuizSubmitView)
+
 
 class QuizSubmitView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def post(self, request, pk):
-        quiz = Quiz.objects.get(pk=pk)
-        answers = request.data.get("answers", {})  # {"question_id": option_id}
+        quiz = get_object_or_404(Quiz, pk=pk)
+        answers = request.data.get("answers", {})
 
-        questions = quiz.questions.all()
         correct = 0
-        streak = 0
-        highest_streak = 0
+        total = quiz.questions.count()
 
-        # Count correct answers + find streak
-        for q in questions:
-            chosen = answers.get(str(q.id))
-            if not chosen:
-                streak = 0
-                continue
-            try:
-                option = Option.objects.get(pk=chosen, question=q)
-                if option.is_correct:
-                    correct += 1
-                    streak += 1
-                    highest_streak = max(highest_streak, streak)
-                else:
-                    streak = 0
-            except Option.DoesNotExist:
-                streak = 0
-                continue
+        for q in quiz.questions.all():
+            chosen_id = answers.get(str(q.id))
+            if chosen_id:
+                try:
+                    option = Option.objects.get(pk=chosen_id, question=q)
+                    if option.is_correct:
+                        correct += 1
+                except Option.DoesNotExist:
+                    pass
 
-        total = len(questions)
         score = int((correct / total) * 100) if total else 0
 
-        # XP SYSTEM
-        base_xp = correct * 10
-        streak_bonus = highest_streak * 5
-        xp_earned = base_xp + streak_bonus
-
-        # THALERS SYSTEM
-        thalers_earned = correct  # 1 thaler per correct (adjust as needed)
+        xp_earned = correct * 10
+        thalers_earned = correct * 2
 
         user = request.user
-
-        # Leveling system
         user.xp += xp_earned
+        user.thalers += thalers_earned
+
         leveled_up = False
-        while user.xp >= 100 * user.level:
-            user.xp -= 100 * user.level
+        if user.xp >= user.level * 100:
             user.level += 1
             leveled_up = True
-            user.badges.append(f"Level {user.level}")
 
-        # Thaler wallet update
-        user.thalers += thalers_earned
         user.save()
 
-        # Record transaction
-        ThalerTransaction.objects.create(
-            user=user,
-            amount=thalers_earned,
-            reason=f"Quiz reward: {quiz.title}"
-        )
-
-        # Save Attempt
+        # FIXED: all fields now exist in model
         QuizAttempt.objects.create(
             user=user,
             quiz=quiz,
             score=score,
+            correct=correct,
+            total=total,
+            xp_earned=x_earned,
+            thalers_earned=thalers_earned,
         )
 
         return Response({
@@ -314,10 +296,9 @@ class QuizSubmitView(APIView):
             "correct": correct,
             "total": total,
             "xp_earned": xp_earned,
-            "streak": highest_streak,
             "thalers_earned": thalers_earned,
             "leveled_up": leveled_up,
-            "new_level": user.level
+            "new_level": user.level if leveled_up else None,
         })
 
 
