@@ -27,6 +27,8 @@ from rest_framework import status
 from rest_framework.response import Response
 from django.db import transaction
 import traceback
+from django.db.models import Avg
+import random
 User = get_user_model()
 
 
@@ -244,6 +246,54 @@ class QuizDeleteView(generics.DestroyAPIView):
  # quizzes/views.py (replace QuizSubmitView)
 
 
+class StartQuizView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        """
+        Query params:
+          category, difficulty, count (int)
+        Returns: a generated quiz object with selected questions/options (not saved as new Quiz)
+        """
+        category = request.query_params.get("category")
+        difficulty = request.query_params.get("difficulty")
+        try:
+            count = int(request.query_params.get("count", 5))
+        except:
+            count = 5
+
+        # Filter source questions by quiz attributes
+        quizzes = Quiz.objects.filter(status="approved")
+        if category:
+            quizzes = quizzes.filter(category__icontains=category)
+        if difficulty:
+            quizzes = quizzes.filter(difficulty__iexact=difficulty)
+
+        # Collect all questions from matched quizzes
+        questions = Question.objects.filter(quiz__in=quizzes).prefetch_related("options")
+        total = questions.count()
+        if total == 0:
+            return Response({"detail": "No questions found"}, status=status.HTTP_404_NOT_FOUND)
+
+        # sample unique questions
+        sample_count = min(count, total)
+        sampled = random.sample(list(questions), sample_count)
+
+        payload = {
+            "title": f"Generated - {category or 'Mixed'}",
+            "description": f"{sample_count} questions",
+            "questions": [
+                {
+                    "id": q.id,
+                    "text": q.text,
+                    "options": [{"id": o.id, "text": o.text} for o in q.options.all()]
+                }
+                for q in sampled
+            ],
+            "count": sample_count
+        }
+        return Response(payload, status=status.HTTP_200_OK)
+
 class QuizSubmitView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
@@ -287,7 +337,7 @@ class QuizSubmitView(APIView):
             score=score,
             correct=correct,
             total=total,
-            xp_earned=x_earned,
+            xp_earned=xp_earned,
             thalers_earned=thalers_earned,
         )
 

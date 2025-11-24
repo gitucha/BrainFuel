@@ -6,6 +6,7 @@ class Payment(models.Model):
     amount = models.DecimalField(max_digits=10, decimal_places=2)
     reference = models.CharField(max_length=100, unique=True)
     status = models.CharField(max_length=20, choices=[("pending", "Pending"), ("success", "Success"), ("failed", "Failed")], default="pending")
+    purpose = models.CharField(max_length=128, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     payment_method = models.CharField(max_length=50, default="mock")
 

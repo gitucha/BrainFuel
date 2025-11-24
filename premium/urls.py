@@ -1,5 +1,8 @@
 from django.urls import path
 from . import views
+from . import views_paystack
+from .views_paystack import create_paystack_session, verify_paystack_transaction
+from .views import buy_thalers, switch_plan
 from .views_paystack import create_paystack_session, verify_paystack_transaction
 
 urlpatterns = [
@@ -10,4 +13,9 @@ urlpatterns = [
     path("creator-earnings/", views.CreatorEarningsView.as_view()),
     path("add-thaler/", views.add_thalers),
     path("upgrade/", views.upgrade_user),
+    path("buy-thalers/", buy_thalers),
+    path("switch-plan/", switch_plan),
+
+    path("paystack/create-session/", views_paystack.create_paystack_session),
+    path("paystack/verify/", views_paystack.verify_paystack_transaction),
 ]

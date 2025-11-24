@@ -15,6 +15,7 @@ from .views import (
     RejectQuizView,
     QuizReportCreateView,
     ReportedQuizzesView,
+    StartQuizView,
     add_question,
     add_option,
     update_question,
@@ -36,6 +37,8 @@ urlpatterns = [
     path("results/", UserResultsView.as_view(), name="user_results"),
     path("<int:pk>/stats/", QuizStatsView.as_view(), name="quiz_stats"),
     path("categories/", CategoryListView.as_view(), name="categories"),
+    path("start/", StartQuizView.as_view(), name="quiz_start"),
+
 
     # admin
     path("pending/", PendingQuizzesView.as_view(), name="pending_quizzes"),
