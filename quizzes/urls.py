@@ -16,6 +16,7 @@ from .views import (
     QuizReportCreateView,
     ReportedQuizzesView,
     StartQuizView,
+    quiz_questions_limited,
     add_question,
     add_option,
     update_question,
@@ -50,6 +51,7 @@ urlpatterns = [
     path("reports/", ReportedQuizzesView.as_view(), name="reported_quizzes"),
 
     # question and option management in creation flow
+    path("quizzes/<int:pk>/questions/", quiz_questions_limited, name="quiz-questions-limited"),
     path("<int:quiz_id>/add-question/", add_question, name="add_question"),
     path("<int:quiz_id>/questions/<int:question_id>/add-option/", add_option, name="add_option"),
     path("<int:quiz_id>/questions/<int:question_id>/", update_question, name="update_question"),

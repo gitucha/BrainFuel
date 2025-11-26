@@ -116,9 +116,16 @@ EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
 DEFAULT_FROM_EMAIL = "BrainFuel <no-reply@brainfuel.local>"
 
 # settings.py
-PAYSTACK_SECRET_KEY = os.environ.get("PAYSTACK_SECRET_KEY", "sk_test_xxx")
-PAYSTACK_PUBLIC_KEY = os.environ.get("PAYSTACK_PUBLIC_KEY", "pk_test_xxx")
+PAYSTACK_SECRET_KEY = os.environ.get("PAYSTACK_SECRET_KEY", "sk_test_5ccea446ffc15b18131c9168d2172e5f1a73e9b4")
+PAYSTACK_PUBLIC_KEY = os.environ.get("PAYSTACK_PUBLIC_KEY", "pk_test_a6734890441429253c63898894dc4dc5b9158071")
 FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://localhost:5173")  # used in success redirect
+
+PAYSTACK_PLAN_CODES = {
+    "scholar": "PLN_hjw99ylwusbxsw4",  # from Paystack dashboard
+    "warrior": "PLN_kzflxy297jvdu5p",
+    "elite": "PLN_hueqi99d39elo0z",
+}
+PAYSTACK_CURRENCY = "KES"  # or NGN/GHS/etc;
 
 
 # Database

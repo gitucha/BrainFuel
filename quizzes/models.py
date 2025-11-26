@@ -44,6 +44,13 @@ class Question(models.Model):
     text = models.CharField(max_length=255)
     order = models.IntegerField(default=0)
 
+    # NEW: per-question difficulty (defaults to quiz difficulty)
+    difficulty = models.CharField(
+        max_length=10,
+        choices=Quiz.DIFFICULTY_CHOICES,
+        default="easy",
+    )
+
     class Meta:
         ordering = ["order", "id"]
 

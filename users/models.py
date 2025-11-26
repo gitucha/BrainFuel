@@ -48,13 +48,14 @@ class User(AbstractBaseUser, PermissionsMixin):
     xp = models.IntegerField(default=0)
     level = models.IntegerField(default=1)
     badges = models.JSONField(default=list, blank=True)
-    achievements = models.JSONField(default=list, blank=True)  # ⭐ ADD THIS
+    achievements = models.JSONField(default=list, blank=True)
     bio = models.TextField(blank=True, null=True)
     is_premium = models.BooleanField(default=False)
     thalers = models.IntegerField(default=0)
     profile_picture = models.ImageField(upload_to='profile_pics/', blank=True, null=True)
     is_active = models.BooleanField(default=True)
     is_staff = models.BooleanField(default=False)
+    subscription_plan = models.CharField(max_length=32, default="basic") 
 
     objects = UserManager()
 
