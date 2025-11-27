@@ -1,8 +1,12 @@
 from django.urls import path
-from . import views
+from .views import (
+    my_achievements,
+    all_achievements,
+    achievement_overview,
+)
 
 urlpatterns = [
-    path('', views.AchievementListView.as_view(), name='achievements_list'),
-    path('me/', views.UserAchievementsView.as_view(), name='user_achievements'),
-    path('claim/', views.claim_achievement, name='claim_achievement'),
+    path("my/", my_achievements, name="my-achievements"),
+    path("all/", all_achievements, name="all-achievements"),
+    path("overview/", achievement_overview, name="achievement-overview"),
 ]

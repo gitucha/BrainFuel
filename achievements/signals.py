@@ -1,46 +1,63 @@
+# achievements/signals.py
 from django.db.models.signals import post_save
 from django.dispatch import receiver
-from django.db.models import Sum
-from django.contrib.auth import get_user_model
-from quizzes.models import QuizAttempt  # adjust if your app name differs
-from .models import Achievement
+
+from quizzes.models import QuizAttempt
+from .models import Achievement, UserAchievement  # adjust names if different
 from notifications.utils import create_notification
 
-User = get_user_model()
 
-def unlock_achievement(user, achievement_title):
-    """Utility to attach an achievement if not already owned."""
-    achievement = Achievement.objects.filter(title=achievement_title).first()
-    if achievement and not user.achievements.filter(id=achievement.id).exists():
-        user.achievements.add(achievement)
-        user.xp += achievement.xp_reward
-        user.save()
-        message = f" You unlocked the '{achievement_title}' achievement and earned {achievement.xp_reward} XP!"
-        create_notification(user, message)
-        print(f"{user.email} unlocked: {achievement_title}")
+def unlock_achievement(user, title: str):
+    """
+    Unlock an achievement by its title, if the user doesn't have it yet.
+    Also gives optional XP reward and creates a notification.
+    """
+    try:
+        achievement = Achievement.objects.get(title=title)
+    except Achievement.DoesNotExist:
+        return
+
+    ua, created = UserAchievement.objects.get_or_create(
+        user=user,
+        achievement=achievement,
+    )
+
+    if not created:
+        # Already had this achievement
+        return
+
+    # Optional: reward extra XP from achievement.xp_reward
+    reward = getattr(achievement, "xp_reward", 0) or 0
+    if reward > 0:
+        current_xp = getattr(user, "xp", 0) or 0
+        user.xp = current_xp + reward
+        user.save(update_fields=["xp"])
+
+    # Notify the user
+    create_notification(
+        user,
+        "Achievement unlocked",
+        f"You unlocked '{achievement.title}'!",
+    )
 
 
 @receiver(post_save, sender=QuizAttempt)
-def handle_quiz_completion(sender, instance, created, **kwargs):
-    """Fired whenever a quiz attempt is saved (completed)."""
+def handle_quiz_completion(sender, instance: QuizAttempt, created, **kwargs):
+    """
+    Runs every time a QuizAttempt is created.
+    Add whatever achievement logic you want here.
+    """
     if not created:
         return
+
     user = instance.user
 
-    # 1️ Achievement: First quiz
+    # Example 1: First quiz ever
     total_attempts = QuizAttempt.objects.filter(user=user).count()
     if total_attempts == 1:
-        unlock_achievement(user, "First Quiz!")
+        unlock_achievement(user, "First Quiz")
 
-    # 2️ Achievement: 10 quizzes
-    if total_attempts >= 10:
-        unlock_achievement(user, "Quiz Explorer")
+    # Example 2: Generic explorer achievement (any completed quiz)
+    unlock_achievement(user, "Quiz Explorer")
 
-    # 3️ Achievement: Perfect Score
-    if instance.score == 100:
-        unlock_achievement(user, "Perfect Score")
-
-    # 4️ Achievement: XP milestones
-    total_xp = user.xp
-    if total_xp >= 1000:
-        unlock_achievement(user, "Knowledge Seeker")
+    # Add more rules here (scores, streaks, categories, etc.)

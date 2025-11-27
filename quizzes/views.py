@@ -12,6 +12,7 @@ from rest_framework.views import APIView
 
 from users.models import ThalerTransaction  # if unused you can remove later
 from .models import Quiz, Question, Option, QuizAttempt, QuizReport
+from notifications.utils import create_notification
 from .serializers import (
     QuizSerializer,
     QuizCreateSerializer,
@@ -34,7 +35,6 @@ class QuizListCreateView(generics.ListCreateAPIView):
     GET /api/quizzes/ -> list (filterable)
     POST /api/quizzes/ -> create (auth required, status pending)
     """
-    serializer_class = QuizSerializer
     filter_backends = [filters.SearchFilter]
     search_fields = ["title", "description", "category"]
 
@@ -64,11 +64,22 @@ class QuizListCreateView(generics.ListCreateAPIView):
             return [permissions.IsAuthenticated()]
         return [permissions.AllowAny()]
 
-    def perform_create(self, serializer):
-        # create as pending by default
-        serializer = QuizCreateSerializer(data=self.request.data)
-        serializer.is_valid(raise_exception=True)
-        serializer.save(created_by=self.request.user, status="pending")
+    def get_serializer_class(self):
+        # Use create serializer for POST, normal serializer for list
+        if self.request.method == "POST":
+            return QuizCreateSerializer
+        return QuizSerializer
+
+    def create(self, request, *args, **kwargs):
+        """
+        Override to attach created_by and status, and return clear errors on 400.
+        """
+        serializer = self.get_serializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        serializer.save(created_by=request.user, status="pending")
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
 
 
 class QuizDetailView(generics.RetrieveAPIView):
@@ -78,15 +89,6 @@ class QuizDetailView(generics.RetrieveAPIView):
     queryset = Quiz.objects.filter(status="approved")
     serializer_class = QuizSerializer
     permission_classes = [permissions.AllowAny]
-
-
-class CreateQuizView(generics.CreateAPIView):
-    serializer_class = QuizCreateSerializer
-    permission_classes = [permissions.IsAuthenticated]
-
-    def perform_create(self, serializer):
-        serializer.save(created_by=self.request.user, status="pending")
-
 
 # ---------- QUESTION & OPTION CRUD / ORDERING ----------
 
@@ -313,6 +315,7 @@ def quiz_questions_limited(request, pk):
     """
     quiz = get_object_or_404(Quiz, pk=pk, status="approved")
 
+    # how many questions to serve
     try:
         num = int(request.query_params.get("num_questions", 10))
     except ValueError:
@@ -327,7 +330,10 @@ def quiz_questions_limited(request, pk):
 
     total = qs.count()
     if total == 0:
-        return Response({"detail": "No questions found for this quiz"}, status=status.HTTP_404_NOT_FOUND)
+        return Response(
+            {"detail": "No questions found for this quiz"},
+            status=status.HTTP_404_NOT_FOUND,
+        )
 
     sample_count = min(num, total)
     sampled = random.sample(list(qs), sample_count)
@@ -340,7 +346,15 @@ def quiz_questions_limited(request, pk):
             {
                 "id": q.id,
                 "text": q.text,
-                "options": [{"id": o.id, "text": o.text} for o in q.options.all()],
+                "difficulty": getattr(q, "difficulty", quiz.difficulty),
+                "options": [
+                    {
+                        "id": o.id,
+                        "text": o.text,
+                        "is_correct": o.is_correct,  # needed for green/red feedback
+                    }
+                    for o in q.options.all()
+                ],
             }
             for q in sampled
         ],
@@ -356,34 +370,73 @@ class QuizSubmitView(APIView):
 
     def post(self, request, pk):
         quiz = get_object_or_404(Quiz, pk=pk)
-        answers = request.data.get("answers", {})
+
+        raw_answers = request.data.get("answers", {})
+
+        # Normalise answers into {question_id_int: option_id_int}
+        answers = {}
+
+        if isinstance(raw_answers, dict):
+            for qid_str, oid in raw_answers.items():
+                try:
+                    qid = int(qid_str)
+                    oid_int = int(oid)
+                    answers[qid] = oid_int
+                except (TypeError, ValueError):
+                    continue
+
+        elif isinstance(raw_answers, list):
+            # Optional list format: [{ "question": qid, "option": oid }, ...]
+            for item in raw_answers:
+                try:
+                    qid = int(item.get("question"))
+                    oid_int = int(item.get("option"))
+                    answers[qid] = oid_int
+                except (TypeError, ValueError, AttributeError):
+                    continue
 
         correct = 0
-        total = quiz.questions.count()
+        total = 0
 
-        for q in quiz.questions.all():
-            chosen_id = answers.get(str(q.id))
-            if chosen_id:
-                try:
-                    option = Option.objects.get(pk=chosen_id, question=q)
-                    if option.is_correct:
-                        correct += 1
-                except Option.DoesNotExist:
-                    pass
+        # Grade: for each submitted answer, verify against DB
+        for qid, oid in answers.items():
+            try:
+                q = Question.objects.get(pk=qid, quiz=quiz)
+            except Question.DoesNotExist:
+                continue
+
+            total += 1
+
+            try:
+                opt = Option.objects.get(pk=oid, question=q)
+            except Option.DoesNotExist:
+                continue
+
+            if opt.is_correct:
+                correct += 1
 
         score = int((correct / total) * 100) if total else 0
 
+        # Reward rules
         xp_earned = correct * 10
         thalers_earned = correct * 2
 
         user = request.user
-        user.xp += xp_earned
-        user.thalers += thalers_earned
+
+        # Defensive: ensure these fields exist and are not None
+        current_xp = getattr(user, "xp", 0) or 0
+        current_thalers = getattr(user, "thalers", 0) or 0
+        current_level = getattr(user, "level", 1) or 1
+
+        user.xp = current_xp + xp_earned
+        user.thalers = current_thalers + thalers_earned
 
         leveled_up = False
-        if user.xp >= user.level * 100:
-            user.level += 1
+        if user.xp >= current_level * 100:
+            user.level = current_level + 1
             leveled_up = True
+        else:
+            user.level = current_level
 
         user.save()
 
@@ -397,6 +450,28 @@ class QuizSubmitView(APIView):
             thalers_earned=thalers_earned,
         )
 
+        # Notifications
+        if xp_earned > 0:
+            create_notification(
+                user,
+                "XP earned",
+                f"You earned {xp_earned} XP from '{quiz.title}'.",
+            )
+
+        if thalers_earned > 0:
+            create_notification(
+                user,
+                "Thalers earned",
+                f"You gained {thalers_earned} Thalers from '{quiz.title}'.",
+            )
+
+        if leveled_up:
+            create_notification(
+                user,
+                "Level up!",
+                f"Congrats! You reached level {user.level}.",
+            )
+
         return Response(
             {
                 "score": score,
@@ -406,7 +481,8 @@ class QuizSubmitView(APIView):
                 "thalers_earned": thalers_earned,
                 "leveled_up": leveled_up,
                 "new_level": user.level if leveled_up else None,
-            }
+            },
+            status=status.HTTP_200_OK,
         )
 
 
@@ -496,14 +572,12 @@ class RejectQuizView(APIView):
         return Response({"message": "quiz rejected"})
 
 
-class QuizReportCreateView(generics.CreateAPIView):
-    queryset = QuizReport.objects.all()
-    serializer_class = QuizReportSerializer
-    permission_classes = [permissions.IsAuthenticated]
-
-    def perform_create(self, serializer):
-        # expect {"quiz": <pk>, "reason": "..."}
-        serializer.save(user=self.request.user)
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def list_quiz_reports(request):
+    reports = QuizReport.objects.all().order_by("-created_at")
+    ser = QuizReportSerializer(reports, many=True)
+    return Response(ser.data)
 
 
 class ReportedQuizzesView(generics.ListAPIView):

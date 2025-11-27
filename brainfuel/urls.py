@@ -41,7 +41,7 @@ schema_view = get_schema_view(
 
 urlpatterns = [
     path('admin/', admin.site.urls),
-    path('api/quizzes/', include('quizzes.urls')),
+    path('api/', include('quizzes.urls')),
     path('api/auth/', include('users.urls')),  
     path('api/users/', include('users.urls')),  
     path('docs/', schema_view.with_ui('swagger', cache_timeout=0), name='api_docs'),
@@ -52,4 +52,5 @@ urlpatterns = [
 
     path('api/admin/insights/', admin_insights, name='admin_insights'),
     path('api/admin/reports/', admin_reports, name='admin_reports'),
+
 ]
