@@ -8,21 +8,26 @@ https://docs.djangoproject.com/en/5.2/howto/deployment/asgi/
 """
 
 import os
-import django
+
+from django.core.asgi import get_asgi_application
 from channels.routing import ProtocolTypeRouter, URLRouter
 from channels.auth import AuthMiddlewareStack
-from django.core.asgi import get_asgi_application
-import quizzes.routing
 
-os.environ.setdefault("DJANGO_SETTINGS_MODULE", "brainfuel.settings")
-django.setup()
+import multiplayer.routing  # <-- our websocket routes
+
+# Make sure the settings module name matches your project (BrainFuel vs brainfuel)
+os.environ.setdefault("DJANGO_SETTINGS_MODULE", "BrainFuel.settings")
+
 django_asgi_app = get_asgi_application()
 
-application = ProtocolTypeRouter({
-    "http": django_asgi_app,
-    "websocket": AuthMiddlewareStack(
-        URLRouter(
-            quizzes.routing.websocket_urlpatterns
-        )
-    ),
-})
+application = ProtocolTypeRouter(
+    {
+        "http": django_asgi_app,
+        "websocket": AuthMiddlewareStack(
+            URLRouter(
+                multiplayer.routing.websocket_urlpatterns
+            )
+        ),
+    }
+)
+

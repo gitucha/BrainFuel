@@ -50,6 +50,8 @@ urlpatterns = [
     path('api/premium/', include('premium.urls')),
     path('api/achievements/', include('achievements.urls')),
 
+    path('api/multiplayer/', include('multiplayer.urls')),
+
     path('api/admin/insights/', admin_insights, name='admin_insights'),
     path('api/admin/reports/', admin_reports, name='admin_reports'),
 
