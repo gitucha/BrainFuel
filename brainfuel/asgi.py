@@ -7,15 +7,15 @@ For more information on this file, see
 https://docs.djangoproject.com/en/5.2/howto/deployment/asgi/
 """
 
+
 import os
 
 from django.core.asgi import get_asgi_application
 from channels.routing import ProtocolTypeRouter, URLRouter
 from channels.auth import AuthMiddlewareStack
 
-import multiplayer.routing  # <-- our websocket routes
+from multiplayer.routing import websocket_urlpatterns
 
-# Make sure the settings module name matches your project (BrainFuel vs brainfuel)
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "BrainFuel.settings")
 
 django_asgi_app = get_asgi_application()
@@ -24,10 +24,7 @@ application = ProtocolTypeRouter(
     {
         "http": django_asgi_app,
         "websocket": AuthMiddlewareStack(
-            URLRouter(
-                multiplayer.routing.websocket_urlpatterns
-            )
+            URLRouter(websocket_urlpatterns)
         ),
     }
 )
-

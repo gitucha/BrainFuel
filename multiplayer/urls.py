@@ -1,9 +1,18 @@
 # multiplayer/urls.py
+
 from django.urls import path
-from .views import list_rooms, create_room, join_room
+from . import views
 
 urlpatterns = [
-    path("rooms/", list_rooms, name="multiplayer-rooms"),        # GET
-    path("rooms/join/", join_room, name="multiplayer-join"),
-    path("rooms/create/", create_room, name="multiplayer-create"),
+    # collection
+    path("rooms/", views.rooms_collection, name="mp-rooms-collection"),  # GET, POST
+
+    # room detail / actions
+    path("rooms/<str:code>/", views.room_detail, name="mp-room-detail"),
+    path("rooms/<str:code>/join/", views.join_room, name="mp-room-join"),
+    path("rooms/<str:code>/start/", views.start_match, name="mp-room-start"),
+    path("rooms/<str:code>/rematch/", views.rematch, name="mp-room-rematch"),
+
+    # public lobby
+    path("lobby/", views.public_lobby, name="mp-lobby"),
 ]
