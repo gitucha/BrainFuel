@@ -4,7 +4,16 @@ from .models import Achievement, UserAchievement
 class AchievementSerializer(serializers.ModelSerializer):
     class Meta:
         model = Achievement
-        fields = "__all__"
+        fields = [
+            "id",
+            "code",
+            "title",
+            "description",
+            "requirement",
+            "icon",
+            "xp_reward",
+            "created_at",
+        ]
 
 
 class UserAchievementSerializer(serializers.ModelSerializer):
@@ -12,4 +21,8 @@ class UserAchievementSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = UserAchievement
-        fields = ['achievement', 'earned_at']
+        fields = [
+            "id",
+            "achievement",
+            "earned_at",
+        ]

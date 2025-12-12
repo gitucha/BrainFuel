@@ -12,6 +12,10 @@ from rest_framework import status
 from django.contrib.auth import get_user_model
 from quizzes.models import Quiz
 from .models import Room
+from quizzes.models import Question
+from asgiref.sync import async_to_sync
+from channels.layers import get_channel_layer
+import random
 
 User = get_user_model()
 
@@ -199,22 +203,85 @@ def join_room(request, code: str):
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def start_match(request, code: str):
+    """
+    REST endpoint to start a match. Loads questions server-side and sends
+    them to the websocket group so consumers don't have to query DB.
+    """
     room = get_object_or_404(Room, code=code)
 
+    # Only host may start
     if room.host_id != request.user.id:
-        return Response(
-            {"detail": "Only host can start the match."},
-            status=status.HTTP_403_FORBIDDEN,
-        )
+        return Response({"detail": "Only host can start the match."}, status=status.HTTP_403_FORBIDDEN)
 
-    room.status = Room.Status.ACTIVE
-    room.save(update_fields=["status"])
+    # Determine difficulty/count from request body or room defaults
+    difficulty = (request.data.get("difficulty") or getattr(room, "difficulty", None) or "any").lower()
+    try:
+        count = int(request.data.get("count") or getattr(room, "question_count", 5) or 5)
+    except (TypeError, ValueError):
+        count = getattr(room, "question_count", 5) or 5
+    count = max(1, min(10, count))
 
-    return Response(
-        {"detail": "Match started.", "status": room.status},
-        status=status.HTTP_200_OK,
+    # If room has a quiz assigned use it, otherwise pick from approved quizzes (fallback)
+    questions_qs = None
+    if getattr(room, "quiz_id", None):
+        try:
+            quiz = Quiz.objects.get(pk=room.quiz_id, status="approved")
+            questions_qs = Question.objects.filter(quiz=quiz).prefetch_related("options")
+        except Quiz.DoesNotExist:
+            questions_qs = Question.objects.none()
+    else:
+        quizzes = Quiz.objects.filter(status="approved")
+        if difficulty in ["easy", "medium", "hard"]:
+            quizzes = quizzes.filter(difficulty__iexact=difficulty)
+        questions_qs = Question.objects.filter(quiz__in=quizzes).prefetch_related("options")
+
+    # If we filtered by difficulty and got zero, fall back to any approved quiz
+    if questions_qs.count() == 0:
+        questions_qs = Question.objects.filter(quiz__status="approved").prefetch_related("options")
+
+    total = questions_qs.count()
+    if total == 0:
+        # nothing to play
+        room.status = "waiting"
+        room.save(update_fields=["status"])
+        return Response({"detail": "No questions available for this match."}, status=status.HTTP_400_BAD_REQUEST)
+
+    sample_count = min(count, total)
+    sampled_questions = random.sample(list(questions_qs), sample_count)
+
+    # Serialize questions (keep only needed fields)
+    questions_payload = []
+    for q in sampled_questions:
+        questions_payload.append({
+            "id": q.id,
+            "text": q.text,
+            "options": [{"id": o.id, "text": o.text} for o in q.options.all()]
+        })
+
+    # mark room active & save metadata
+    room.status = "active"
+    room.difficulty = difficulty if hasattr(room, "difficulty") else getattr(room, "difficulty", difficulty)
+    room.question_count = sample_count if hasattr(room, "question_count") else getattr(room, "question_count", sample_count)
+    room.save(update_fields=["status", "difficulty", "question_count"])
+
+    # Send to websocket group
+    channel_layer = get_channel_layer()
+    group_name = f"quiz_{room.code}"
+    async_to_sync(channel_layer.group_send)(
+        group_name,
+        {
+            "type": "quiz.message",
+            "event": "start_with_questions",
+            "payload": {
+                "questions": questions_payload,
+                "difficulty": difficulty,
+                "count": sample_count,
+                "host_id": request.user.id,
+            },
+        },
     )
 
+    return Response({"detail": "Match started.", "status": "active", "questions": sample_count}, status=status.HTTP_200_OK)
 
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])

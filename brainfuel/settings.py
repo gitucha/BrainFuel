@@ -56,7 +56,7 @@ INSTALLED_APPS = [
     'quizzes',
     'leaderboard',
     'premium',
-    'achievements',
+    'achievements.apps.AchievementsConfig',
     'drf_yasg',
     'notifications',
     'admin_insights',

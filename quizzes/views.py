@@ -10,6 +10,7 @@ from rest_framework.permissions import IsAuthenticated, IsAdminUser
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from notifications.models import Notification
 from users.models import ThalerTransaction  # if unused you can remove later
 from .models import Quiz, Question, Option, QuizAttempt, QuizReport
 from notifications.utils import create_notification
@@ -23,6 +24,7 @@ from .serializers import (
     OptionCreateSerializer,
     OrderUpdateSerializer,
 )
+from achievements.utils import unlock
 
 import random
 import traceback
@@ -308,10 +310,10 @@ def quiz_questions_limited(request, pk):
     """
     GET /api/quizzes/<pk>/questions/?num_questions=10&difficulty=easy
 
-    - num_questions: user-selected (1–10, clamped).
+    - num_questions: user-selected (1-10, clamped).
     - difficulty: "easy" | "medium" | "hard" | omitted -> any difficulty.
     - Only returns questions for an approved quiz.
-    - Random order.
+    - Random order, with safe fallback if difficulty has no questions.
     """
     quiz = get_object_or_404(Quiz, pk=pk, status="approved")
 
@@ -322,13 +324,25 @@ def quiz_questions_limited(request, pk):
         num = 10
     num = max(1, min(10, num))  # clamp 1–10
 
-    difficulty = request.query_params.get("difficulty")
+    raw_diff = request.query_params.get("difficulty")
+    requested_difficulty = (raw_diff or "").lower() or None
+
     qs = quiz.questions.all().prefetch_related("options")
 
-    if difficulty in ["easy", "medium", "hard"]:
-        qs = qs.filter(difficulty=difficulty)
+    # 1) Try filtered by difficulty (if valid)
+    if requested_difficulty in ["easy", "medium", "hard"]:
+        qs_filtered = qs.filter(difficulty__iexact=requested_difficulty)
+    else:
+        qs_filtered = qs
 
-    total = qs.count()
+    # 2) If no questions found at that difficulty, fall back to ANY
+    if qs_filtered.count() == 0:
+        qs_filtered = qs
+        effective_difficulty = quiz.difficulty  # fall back to quiz default
+    else:
+        effective_difficulty = requested_difficulty or quiz.difficulty
+
+    total = qs_filtered.count()
     if total == 0:
         return Response(
             {"detail": "No questions found for this quiz"},
@@ -336,12 +350,13 @@ def quiz_questions_limited(request, pk):
         )
 
     sample_count = min(num, total)
-    sampled = random.sample(list(qs), sample_count)
+    sampled = random.sample(list(qs_filtered), sample_count)
 
     payload = {
         "quiz": QuizSerializer(quiz).data,
         "num_questions": sample_count,
-        "difficulty": difficulty,
+        # what difficulty actually got used (for UI display)
+        "difficulty": effective_difficulty,
         "questions": [
             {
                 "id": q.id,
@@ -351,7 +366,7 @@ def quiz_questions_limited(request, pk):
                     {
                         "id": o.id,
                         "text": o.text,
-                        "is_correct": o.is_correct,  # needed for green/red feedback
+                        "is_correct": o.is_correct,
                     }
                     for o in q.options.all()
                 ],
@@ -361,15 +376,26 @@ def quiz_questions_limited(request, pk):
     }
     return Response(payload, status=status.HTTP_200_OK)
 
-
 # ---------- SUBMIT QUIZ / RESULTS / STATS ----------
 
 
 class QuizSubmitView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
+    def _create_notification(self, user, title: str, body: str):
+        """
+        Small helper for creating a notification record.
+        Your Notification model has only 'message' (no title column),
+        so combine title+body into the message to be safe.
+        """
+        try:
+            Notification.objects.create(user=user, message=f"{title}: {body}")
+        except Exception:
+            # don't fail the whole request on notification errors
+            pass
+
     def post(self, request, pk):
-        quiz = get_object_or_404(Quiz, pk=pk)
+        quiz = get_object_or_404(Quiz, pk=pk, status="approved")
 
         raw_answers = request.data.get("answers", {})
 
@@ -412,9 +438,10 @@ class QuizSubmitView(APIView):
             except Option.DoesNotExist:
                 continue
 
-            if opt.is_correct:
+            if getattr(opt, "is_correct", False):
                 correct += 1
 
+        # Defensive: avoid division by zero
         score = int((correct / total) * 100) if total else 0
 
         # Reward rules
@@ -428,64 +455,88 @@ class QuizSubmitView(APIView):
         current_thalers = getattr(user, "thalers", 0) or 0
         current_level = getattr(user, "level", 1) or 1
 
+        # Apply xp & thalers and compute level up(s)
         user.xp = current_xp + xp_earned
         user.thalers = current_thalers + thalers_earned
 
         leveled_up = False
-        if user.xp >= current_level * 100:
-            user.level = current_level + 1
+        # simple level loop: gain levels while xp threshold met
+        while user.xp >= (user.level or current_level) * 100:
+            user.level = (user.level or current_level) + 1
             leveled_up = True
-        else:
-            user.level = current_level
 
-        user.save()
+        # Save user and create the QuizAttempt inside a transaction
+        with transaction.atomic():
+            user.save()
 
-        QuizAttempt.objects.create(
-            user=user,
-            quiz=quiz,
-            score=score,
-            correct=correct,
-            total=total,
-            xp_earned=xp_earned,
-            thalers_earned=thalers_earned,
-        )
+            attempt = QuizAttempt.objects.create(
+                user=user,
+                quiz=quiz,
+                score=score,
+                correct=correct,
+                total=total,
+                xp_earned=xp_earned,
+                thalers_earned=thalers_earned,
+            )
 
-        # Notifications
+        # Notifications (non-blocking)
         if xp_earned > 0:
-            create_notification(
+            self._create_notification(
                 user,
                 "XP earned",
                 f"You earned {xp_earned} XP from '{quiz.title}'.",
             )
 
         if thalers_earned > 0:
-            create_notification(
+            self._create_notification(
                 user,
                 "Thalers earned",
                 f"You gained {thalers_earned} Thalers from '{quiz.title}'.",
             )
 
         if leveled_up:
-            create_notification(
+            self._create_notification(
                 user,
                 "Level up!",
                 f"Congrats! You reached level {user.level}.",
             )
 
-        return Response(
-            {
-                "score": score,
-                "correct": correct,
-                "total": total,
-                "xp_earned": xp_earned,
-                "thalers_earned": thalers_earned,
-                "leveled_up": leveled_up,
-                "new_level": user.level if leveled_up else None,
-            },
-            status=status.HTTP_200_OK,
-        )
+        # ------------------------------
+        # Achievement checks (simple & immediate)
+        # ------------------------------
+        try:
+            # Count attempts including this one
+            attempts_count = QuizAttempt.objects.filter(user=user).count()
 
+            # First quiz ever
+            if attempts_count >= 1:
+                unlock(user, "first_quiz")
 
+            # Example milestone achievements (ensure Achievement codes exist)
+            if attempts_count >= 5:
+                unlock(user, "five_quizzes")
+            if attempts_count >= 10:
+                unlock(user, "ten_quizzes")
+
+            # Perfect score (all answered correctly)
+            if total > 0 and correct == total:
+                unlock(user, "perfect_score")
+        except Exception:
+            # do not fail on achievement-side errors
+            pass
+
+        # Build response
+        response_payload = {
+            "score": score,
+            "correct": correct,
+            "total": total,
+            "xp_earned": xp_earned,
+            "thalers_earned": thalers_earned,
+            "leveled_up": leveled_up,
+            "new_level": user.level if leveled_up else None,
+        }
+
+        return Response(response_payload, status=status.HTTP_200_OK)
 class LeaderboardView(APIView):
     permission_classes = [permissions.AllowAny]
 
