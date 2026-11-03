@@ -8,3 +8,10 @@ PyJWT==2.10.1
 python-dotenv==1.1.1
 sqlparse==0.5.3
 tzdata==2025.2
+
+# Previously missing: imported by the code but not listed
+channels>=4.2,<5          # websockets / multiplayer
+daphne>=4.1,<5            # ASGI server for channels
+django-cors-headers>=4.4  # 'corsheaders' in INSTALLED_APPS
+drf-yasg>=1.21.8          # /docs/ swagger UI
+requests>=2.32            # Paystack API calls

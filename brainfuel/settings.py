@@ -10,34 +10,26 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/5.2/ref/settings/
 """
 
-from dotenv import load_dotenv
 import os
-load_dotenv()
-
-SECRET_KEY = os.getenv('DJANGO_SECRET_KEY')
-DEBUG = os.getenv('DEBUG', 'False') == 'True'
-
-
 from pathlib import Path
+
+from dotenv import load_dotenv
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-
-# Quick-start development settings - unsuitable for production
-# See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
+# Secrets and environment-specific values live in .env (see .env.example).
+load_dotenv(BASE_DIR / ".env")
 
 # SECURITY WARNING: keep the secret key used in production secret!
-import os
-
-SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY')
+SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY")
 if not SECRET_KEY:
-    raise Exception("DJANGO_SECRET_KEY environment variable not set")
+    raise Exception("DJANGO_SECRET_KEY environment variable not set (copy .env.example to .env)")
 
 # SECURITY WARNING: don't run with debug turned on in production
-DEBUG = True
+DEBUG = os.environ.get("DEBUG", "False") == "True"
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = [h.strip() for h in os.environ.get("ALLOWED_HOSTS", "").split(",") if h.strip()]
 
 EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
 
@@ -103,7 +95,7 @@ TEMPLATES = [
 ]
 
 
-ASGI_APPLICATION = "BrainFuel.asgi.application"
+ASGI_APPLICATION = "brainfuel.asgi.application"
 
 CHANNEL_LAYERS = {
     "default": {
@@ -111,13 +103,12 @@ CHANNEL_LAYERS = {
     }
 }
 
-FRONTEND_URL = "http://localhost:5173"
 EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
 DEFAULT_FROM_EMAIL = "BrainFuel <no-reply@brainfuel.local>"
 
-# settings.py
-PAYSTACK_SECRET_KEY = os.environ.get("PAYSTACK_SECRET_KEY", "sk_test_5ccea446ffc15b18131c9168d2172e5f1a73e9b4")
-PAYSTACK_PUBLIC_KEY = os.environ.get("PAYSTACK_PUBLIC_KEY", "pk_test_a6734890441429253c63898894dc4dc5b9158071")
+# Paystack keys come only from the environment, never hardcoded.
+PAYSTACK_SECRET_KEY = os.environ.get("PAYSTACK_SECRET_KEY")
+PAYSTACK_PUBLIC_KEY = os.environ.get("PAYSTACK_PUBLIC_KEY")
 FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://localhost:5173")  # used in success redirect
 
 PAYSTACK_PLAN_CODES = {
