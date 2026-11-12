@@ -143,8 +143,11 @@ class QuizRoomConsumer(AsyncJsonWebsocketConsumer):
                 return
 
         ROOM_STATE[self.room_id] = state
-        await self._broadcast_state()
         await self.channel_layer.group_discard(self.group_name, self.channel_name)
+        await self._broadcast_state()
+
+        if state.get("started") and self._everyone_answered(state):
+            await self._advance_or_finish()
 
     async def receive_json(self, content, **kwargs):
         """
@@ -220,6 +223,7 @@ class QuizRoomConsumer(AsyncJsonWebsocketConsumer):
         state["count"] = count
         state["questions"] = questions
         state["current_index"] = 0
+        state["answered"] = set()
         state["started"] = True
         ROOM_STATE[self.room_id] = state
 
@@ -244,12 +248,43 @@ class QuizRoomConsumer(AsyncJsonWebsocketConsumer):
 
     async def _handle_start_with_questions(self, payload):
         """
-        Called when an internal group event 'start_with_questions' is received.
-        This simply sends the current question to the group.
+        Called in EVERY consumer of the room when 'start_with_questions' is
+        group-sent, either by the host's start_game action or by the REST
+        start endpoint (which includes the questions in the payload).
+
+        Each consumer sends the first question to its own client only.
+        (Group-sending here would deliver N copies of each question.)
         """
-        print(f"[WS] _handle_start_with_questions invoked for room {self.room_id} payload={payload}")
-        # Send first question to clients
-        await self._send_current_question()
+        state = ROOM_STATE.get(self.room_id)
+        if state is None:
+            return
+
+        questions = payload.get("questions")
+        if questions and state.get("questions") != questions:
+            # Started via REST: load the questions into the in-memory game.
+            for p in state["players"].values():
+                p["score"] = 0
+                p["correct"] = 0
+                p["total"] = 0
+            state["questions"] = questions
+            state["difficulty"] = payload.get("difficulty", state.get("difficulty"))
+            state["count"] = len(questions)
+            state["current_index"] = 0
+            state["answered"] = set()
+            state["started"] = True
+
+        if not state.get("questions"):
+            return
+
+        idx = state.get("current_index", 0)
+        await self.send_json(
+            {
+                "type": "question",
+                "question": state["questions"][idx],
+                "index": idx,
+                "total": len(state["questions"]),
+            }
+        )
 
     async def _handle_answer(self, content):
         user = self.scope["user"]
@@ -275,6 +310,11 @@ class QuizRoomConsumer(AsyncJsonWebsocketConsumer):
         if idx >= len(state.get("questions", [])):
             return
 
+        answered = state.setdefault("answered", set())
+        if uid in answered:
+            return  # already answered this question
+        answered.add(uid)
+
         question = state["questions"][idx]
         qid = question["id"]
 
@@ -285,8 +325,16 @@ class QuizRoomConsumer(AsyncJsonWebsocketConsumer):
             player["correct"] = player.get("correct", 0) + 1
             player["score"] = player.get("score", 0) + 10
 
-        # minimal behaviour: advance immediately to next question
-        await self._advance_or_finish()
+        await self._broadcast_state()
+
+        # Move on only once every (non-spectator) player has answered.
+        if self._everyone_answered(state):
+            await self._advance_or_finish()
+
+    @staticmethod
+    def _everyone_answered(state):
+        active = {p["id"] for p in state["players"].values() if not p.get("is_spectator")}
+        return active.issubset(state.get("answered", set()))
 
     async def _advance_or_finish(self):
         state = ROOM_STATE.get(self.room_id)
@@ -294,6 +342,7 @@ class QuizRoomConsumer(AsyncJsonWebsocketConsumer):
             return
 
         state["current_index"] = state.get("current_index", 0) + 1
+        state["answered"] = set()
         if state["current_index"] >= len(state.get("questions", [])):
             state["started"] = False
             ROOM_STATE[self.room_id] = state

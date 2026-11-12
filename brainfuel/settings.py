@@ -36,6 +36,8 @@ EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
 # Application definition
 
 INSTALLED_APPS = [
+    # Must be first: makes `manage.py runserver` serve ASGI (websockets).
+    'daphne',
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
