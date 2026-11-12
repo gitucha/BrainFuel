@@ -1,131 +1,95 @@
-from django.core.management.base import BaseCommand
-from quizzes.models import Quiz, Question, Option
-from django.contrib.auth import get_user_model
 import random
+
+from django.contrib.auth import get_user_model
+from django.core.management.base import BaseCommand, CommandError
+from django.db import transaction
+
+from quizzes.models import Option, Question, Quiz
+from quizzes.seed_data import QUESTION_BANK
 
 User = get_user_model()
 
-CATEGORIES = [
-    "Science",
-    "History",
-    "Technology",
-    "Math",
-    "Geography",
-    "Literature",
-    "Sports",
-    "Pop Culture",
-    "Logic",
-    "General Knowledge",
-]
+# Difficulty of "<Category> Quiz 1" .. "<Category> Quiz 5"
+QUIZ_DIFFICULTIES = ["easy", "easy", "medium", "medium", "hard"]
+QUESTIONS_PER_QUIZ = 4
 
-DIFFICULTIES = ["easy", "medium", "hard"]
 
-# --- Question Pools (Option C Mix) ---
-
-SCIENCE_QS = [
-    ("What planet is known as the Red Planet?", ["Mars", "Jupiter", "Saturn", "Venus"], "Mars"),
-    ("What gas do plants absorb during photosynthesis?", ["Oxygen", "Carbon Dioxide", "Nitrogen", "Hydrogen"], "Carbon Dioxide"),
-    ("What is H2O?", ["Salt", "Water", "Hydrogen", "Ozone"], "Water"),
-]
-
-HISTORY_QS = [
-    ("Who was the first President of the United States?", ["George Washington", "Abraham Lincoln", "John Adams", "Thomas Jefferson"], "George Washington"),
-    ("What year did World War II end?", ["1941", "1943", "1945", "1950"], "1945"),
-    ("Which empire built the Colosseum?", ["Roman", "Greek", "Ottoman", "Persian"], "Roman"),
-]
-
-TECH_QS = [
-    ("HTML stands for?", ["Hyper Trainer Marking Language", "HyperText Markup Language", "HighText Machine Language", "None"], "HyperText Markup Language"),
-    ("What does CPU stand for?", ["Central Processing Unit", "Computer Power Unit", "Control Panel Unit", "Compute Performance Usage"], "Central Processing Unit"),
-    ("Python was created by?", ["Guido van Rossum", "Elon Musk", "James Gosling", "Alan Turing"], "Guido van Rossum"),
-]
-
-MATH_QS = [
-    ("What is 12 × 12?", ["124", "144", "112", "154"], "144"),
-    ("Solve: 8 + 6 / 3", ["6", "10", "12", "8"], "10"),
-    ("What is the square root of 81?", ["8", "9", "7", "6"], "9"),
-]
-
-GEOGRAPHY_QS = [
-    ("What is the largest ocean?", ["Atlantic", "Pacific", "Indian", "Arctic"], "Pacific"),
-    ("Where is Mount Everest located?", ["China", "India", "Nepal", "Japan"], "Nepal"),
-    ("What is the capital of Australia?", ["Sydney", "Melbourne", "Canberra", "Perth"], "Canberra"),
-]
-
-LITERATURE_QS = [
-    ("Who wrote '1984'?", ["George Orwell", "J.K Rowling", "Mark Twain", "Jane Austen"], "George Orwell"),
-    ("Shakespeare wrote…?", ["The Odyssey", "Hamlet", "Inferno", "Ulysses"], "Hamlet"),
-    ("Who wrote 'Pride and Prejudice'?", ["Bronte", "Shelley", "Austen", "Eliot"], "Austen"),
-]
-
-SPORTS_QS = [
-    ("How many players in a football team?", ["9", "10", "11", "12"], "11"),
-    ("Where were the 2016 Olympics held?", ["Tokyo", "Rio", "Paris", "London"], "Rio"),
-    ("What sport uses a shuttlecock?", ["Tennis", "Badminton", "Squash", "Croquet"], "Badminton"),
-]
-
-POP_QS = [
-    ("Who sang 'Blinding Lights'?", ["The Weeknd", "Drake", "Justin Bieber", "Bruno Mars"], "The Weeknd"),
-    ("Which movie features Iron Man?", ["DC Universe", "Harry Potter", "Star Wars", "Marvel Universe"], "Marvel Universe"),
-    ("What show features Eleven?", ["The Boys", "Stranger Things", "Loki", "Lost"], "Stranger Things"),
-]
-
-LOGIC_QS = [
-    ("If A=1, B=2… what is Z?", ["24", "25", "26", "27"], "26"),
-    ("Which number completes the sequence: 2, 4, 8, 16, ?", ["18", "24", "32", "20"], "32"),
-    ("What has keys but can't open locks?", ["Map", "Piano", "Clock", "River"], "Piano"),
-]
-
-GK_QS = [
-    ("What is the capital of Kenya?", ["Nairobi", "Kampala", "Accra", "Lagos"], "Nairobi"),
-    ("How many continents exist?", ["5", "6", "7", "8"], "7"),
-    ("Which is the fastest land animal?", ["Cheetah", "Lion", "Horse", "Falcon"], "Cheetah"),
-]
-
-QUESTION_MAP = {
-    "Science": SCIENCE_QS,
-    "History": HISTORY_QS,
-    "Technology": TECH_QS,
-    "Math": MATH_QS,
-    "Geography": GEOGRAPHY_QS,
-    "Literature": LITERATURE_QS,
-    "Sports": SPORTS_QS,
-    "Pop Culture": POP_QS,
-    "Logic": LOGIC_QS,
-    "General Knowledge": GK_QS,
-}
+def validate_bank():
+    """Fail loudly on bad data instead of seeding broken questions."""
+    seen = set()
+    for category, levels in QUESTION_BANK.items():
+        for difficulty in set(QUIZ_DIFFICULTIES):
+            needed = QUIZ_DIFFICULTIES.count(difficulty) * QUESTIONS_PER_QUIZ
+            got = len(levels.get(difficulty, []))
+            if got != needed:
+                raise CommandError(f"{category}/{difficulty}: need {needed} questions, found {got}")
+            for text, options, correct in levels[difficulty]:
+                if text in seen:
+                    raise CommandError(f"Duplicate question: {text}")
+                seen.add(text)
+                if len(text) > 255:
+                    raise CommandError(f"Question too long (max 255): {text}")
+                if len(set(options)) != 4 or correct not in options:
+                    raise CommandError(f"Need 4 distinct options including the answer: {text}")
 
 
 class Command(BaseCommand):
-    help = "Seeds the database with 50 mixed quizzes (C type)"
+    help = (
+        "Seed/refresh the built-in quizzes: 5 quizzes per category, each with "
+        "its own questions matching the quiz's difficulty. Updates existing "
+        "seeded quizzes in place (keeping attempt history); quizzes created "
+        "by users are not touched."
+    )
 
-    def handle(self, *args, **kwargs):
-        Quiz.objects.all().delete()
-        Question.objects.all().delete()
-        Option.objects.all().delete()
+    @transaction.atomic
+    def handle(self, *args, **options):
+        validate_bank()
 
-        user = User.objects.first()
+        author = (
+            User.objects.filter(is_superuser=True).order_by("id").first()
+            or User.objects.order_by("id").first()
+        )
+        if author is None:
+            raise CommandError("Create a user first (e.g. python manage.py createsuperuser).")
 
-        for category in CATEGORIES:
-            qs = QUESTION_MAP[category]
-            for i in range(5):  # 5 quizzes per category
-                quiz = Quiz.objects.create(
-                    title=f"{category} Quiz {i+1}",
-                    description=f"A fun and educational {category.lower()} quiz.",
-                    category=category,
-                    difficulty=random.choice(DIFFICULTIES),
-                    created_by=user,
-                    status="approved",
-                )
+        created = updated = 0
+        for category, levels in QUESTION_BANK.items():
+            used = {d: 0 for d in levels}  # how many questions of each level are taken
 
-                # add questions
-                for (text, opts, correct) in qs:
-                    q = Question.objects.create(quiz=quiz, text=text)
-                    for o in opts:
-                        Option.objects.create(
-                            question=q,
-                            text=o,
-                            is_correct=(o == correct)
-                        )
+            for i, difficulty in enumerate(QUIZ_DIFFICULTIES, start=1):
+                title = f"{category} Quiz {i}"
+                start = used[difficulty]
+                questions = levels[difficulty][start:start + QUESTIONS_PER_QUIZ]
+                used[difficulty] += QUESTIONS_PER_QUIZ
 
-        self.stdout.write(self.style.SUCCESS("✔ Successfully seeded 50 mixed quizzes (Option C)!"))
+                quiz = Quiz.objects.filter(title=title, category=category).order_by("id").first()
+                if quiz is None:
+                    quiz = Quiz(title=title, category=category, created_by=author)
+                    created += 1
+                else:
+                    updated += 1
+                quiz.description = f"A {difficulty} {category.lower()} quiz."
+                quiz.difficulty = difficulty
+                quiz.status = "approved"
+                quiz.save()
+
+                # Replace the questions. QuizAttempt rows only reference the
+                # quiz, so users' scores and history are kept.
+                quiz.questions.all().delete()
+                rng = random.Random(title)  # same option order on every run
+                for order, (text, opts, correct) in enumerate(questions):
+                    question = Question.objects.create(
+                        quiz=quiz, text=text, order=order, difficulty=difficulty
+                    )
+                    shuffled = list(opts)
+                    rng.shuffle(shuffled)
+                    Option.objects.bulk_create(
+                        Option(question=question, text=o, is_correct=(o == correct), order=n)
+                        for n, o in enumerate(shuffled)
+                    )
+
+        total_q = len(QUIZ_DIFFICULTIES) * QUESTIONS_PER_QUIZ * len(QUESTION_BANK)
+        self.stdout.write(self.style.SUCCESS(
+            f"✔ Seeded {created + updated} quizzes ({created} new, {updated} updated), "
+            f"{total_q} unique questions."
+        ))
